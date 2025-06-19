@@ -11,7 +11,7 @@ import (
 )
 
 // RegisterRoutes sets up all endpoints with proper clean architecture
-func RegisterRoutes(r *gin.Engine, authHandler *auth.Handler, jwtSecret string, db *gorm.DB) {
+func RegisterRoutes(r *gin.Engine, jwtSecret string, db *gorm.DB) {
 	// Initialize repositories
 	eventRepo := repository.NewEventRepository(db)
 	quizRepo := repository.NewQuizRepository(db)
@@ -20,11 +20,13 @@ func RegisterRoutes(r *gin.Engine, authHandler *auth.Handler, jwtSecret string, 
 
 	// Initialize services
 	eventsService := events.NewService(eventRepo, quizRepo, sessionRepo, classroomRepo)
-	reportsService := reports.NewService(eventRepo)
+	reportsService := reports.NewService(eventRepo, classroomRepo)
+	authService := auth.NewService(db, jwtSecret)
 
 	// Initialize handlers
 	eventsHandler := events.NewHandler(eventsService)
 	reportsHandler := reports.NewHandler(reportsService)
+	authHandler := auth.NewHandler(authService)
 
 	api := r.Group("/api")
 	{
@@ -61,6 +63,8 @@ func RegisterRoutes(r *gin.Engine, authHandler *auth.Handler, jwtSecret string, 
 				reportsGroup.GET("/timeout-analysis", reportsHandler.GetTimeoutAnalysis)
 				reportsGroup.GET("/completion-rate", reportsHandler.GetCompletionRate)
 				reportsGroup.GET("/dropoff-analysis", reportsHandler.GetDropoffAnalysis)
+				reportsGroup.GET("/student-performance-list", reportsHandler.GetStudentPerformanceList)
+				reportsGroup.GET("/classroom-engagement-history", reportsHandler.GetClassroomEngagementHistory)
 			}
 		}
 	}

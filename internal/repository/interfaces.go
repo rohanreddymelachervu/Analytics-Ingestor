@@ -11,7 +11,9 @@ import (
 type EventRepository interface {
 	SaveQuestionPublishedEvent(event *models.QuestionPublishedEvent) error
 	SaveAnswerSubmittedEvent(event *models.AnswerSubmittedEvent) error
-	GetActiveParticipants(sessionID uuid.UUID, timeRange time.Duration) ([]ParticipantMetrics, error)
+
+	// Analytics methods with pagination support
+	GetActiveParticipants(sessionID uuid.UUID, timeRange time.Duration, pagination PaginationParams) (*PaginatedResponse[ParticipantMetrics], error)
 	GetQuestionsPerMinuteStats(sessionID uuid.UUID) (*QuestionsPerMinuteStats, error)
 	GetStudentPerformance(studentID, classroomID uuid.UUID) (*StudentPerformanceData, error)
 	GetClassroomEngagement(classroomID uuid.UUID, dateRange time.Duration) (*ClassroomEngagementData, error)
@@ -24,6 +26,10 @@ type EventRepository interface {
 	GetTimeoutAndSkippedRate(sessionID, questionID uuid.UUID) (*TimeoutData, error)
 	GetCompletionRate(sessionID uuid.UUID) (*CompletionRateData, error)
 	GetDropoffPoints(sessionID uuid.UUID) ([]DropoffPoint, error)
+
+	// Paginated methods for large result sets
+	GetStudentPerformanceList(classroomID uuid.UUID, pagination PaginationParams) (*PaginatedResponse[StudentPerformanceData], error)
+	GetClassroomEngagementHistory(classroomID uuid.UUID, dateRange time.Duration, pagination PaginationParams) (*PaginatedResponse[ClassroomEngagementData], error)
 }
 
 // QuizRepository handles quiz-related operations
@@ -47,4 +53,7 @@ type ClassroomRepository interface {
 	CreateStudent(student *models.Student) error
 	AddStudentToClassroom(classroomID, studentID uuid.UUID) error
 	GetClassroomStudents(classroomID uuid.UUID) ([]models.Student, error)
+
+	// Paginated classroom methods
+	GetClassroomStudentsPaginated(classroomID uuid.UUID, pagination PaginationParams) (*PaginatedResponse[models.Student], error)
 }

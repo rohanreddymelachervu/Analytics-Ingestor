@@ -52,12 +52,26 @@ func (r *eventRepository) SaveAnswerSubmittedEvent(event *models.AnswerSubmitted
 	return r.db.Create(event).Error
 }
 
-func (r *eventRepository) GetActiveParticipants(sessionID uuid.UUID, timeRange time.Duration) ([]ParticipantMetrics, error) {
+func (r *eventRepository) GetActiveParticipants(sessionID uuid.UUID, timeRange time.Duration, pagination PaginationParams) (*PaginatedResponse[ParticipantMetrics], error) {
 	var results []ParticipantMetrics
+	var totalCount int64
 
 	cutoffTime := time.Now().Add(-timeRange)
 
+	// First, get the total count for pagination
 	err := r.db.Raw(`
+		SELECT COUNT(DISTINCT s.student_id)
+		FROM answer_submitted_events ase
+		JOIN students s ON ase.student_id = s.student_id
+		WHERE ase.session_id = ? AND ase.submitted_at >= ?
+	`, sessionID, cutoffTime).Scan(&totalCount).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Then get the paginated results
+	err = r.db.Raw(`
 		SELECT 
 			s.student_id,
 			s.name,
@@ -72,9 +86,15 @@ func (r *eventRepository) GetActiveParticipants(sessionID uuid.UUID, timeRange t
 		WHERE ase.session_id = ? AND ase.submitted_at >= ?
 		GROUP BY s.student_id, s.name
 		ORDER BY last_activity DESC
-	`, sessionID, cutoffTime).Scan(&results).Error
+		LIMIT ? OFFSET ?
+	`, sessionID, cutoffTime, pagination.PageSize, pagination.Offset).Scan(&results).Error
 
-	return results, err
+	if err != nil {
+		return nil, err
+	}
+
+	response := NewPaginatedResponse(results, pagination, int(totalCount))
+	return &response, nil
 }
 
 func (r *eventRepository) GetQuestionsPerMinuteStats(sessionID uuid.UUID) (*QuestionsPerMinuteStats, error) {
@@ -461,9 +481,155 @@ func (r *classroomRepository) GetClassroomStudents(classroomID uuid.UUID) ([]mod
 	var students []models.Student
 	err := r.db.Raw(`
 		SELECT s.* 
-		FROM students s 
-		JOIN classroom_students cs ON s.student_id = cs.student_id 
+		FROM students s
+		JOIN classroom_students cs ON s.student_id = cs.student_id
 		WHERE cs.classroom_id = ?
+		ORDER BY s.name
 	`, classroomID).Scan(&students).Error
 	return students, err
+}
+
+// Paginated version of GetClassroomStudents
+func (r *classroomRepository) GetClassroomStudentsPaginated(classroomID uuid.UUID, pagination PaginationParams) (*PaginatedResponse[models.Student], error) {
+	var students []models.Student
+	var totalCount int64
+
+	// Get total count
+	err := r.db.Raw(`
+		SELECT COUNT(*)
+		FROM students s
+		JOIN classroom_students cs ON s.student_id = cs.student_id
+		WHERE cs.classroom_id = ?
+	`, classroomID).Scan(&totalCount).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Get paginated results
+	err = r.db.Raw(`
+		SELECT s.* 
+		FROM students s
+		JOIN classroom_students cs ON s.student_id = cs.student_id
+		WHERE cs.classroom_id = ?
+		ORDER BY s.name
+		LIMIT ? OFFSET ?
+	`, classroomID, pagination.PageSize, pagination.Offset).Scan(&students).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	response := NewPaginatedResponse(students, pagination, int(totalCount))
+	return &response, nil
+}
+
+// New paginated method for student performance across a classroom
+func (r *eventRepository) GetStudentPerformanceList(classroomID uuid.UUID, pagination PaginationParams) (*PaginatedResponse[StudentPerformanceData], error) {
+	var results []StudentPerformanceData
+	var totalCount int64
+
+	// Get total count of students in classroom
+	err := r.db.Raw(`
+		SELECT COUNT(DISTINCT s.student_id)
+		FROM students s
+		JOIN classroom_students cs ON s.student_id = cs.student_id
+		WHERE cs.classroom_id = ?
+	`, classroomID).Scan(&totalCount).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Get paginated student performance data
+	err = r.db.Raw(`
+		SELECT 
+			s.student_id,
+			COALESCE(COUNT(ase.event_id), 0) as questions_attempted,
+			COALESCE(SUM(CASE WHEN ase.is_correct THEN 1 ELSE 0 END), 0) as correct_answers,
+			COALESCE(ROUND(AVG(CASE WHEN ase.is_correct THEN 1.0 ELSE 0.0 END) * 100, 2), 0) as overall_accuracy,
+			'N/A' as average_response_time
+		FROM students s
+		JOIN classroom_students cs ON s.student_id = cs.student_id
+		LEFT JOIN answer_submitted_events ase ON ase.student_id = s.student_id
+		LEFT JOIN quiz_sessions qs ON ase.session_id = qs.session_id AND qs.classroom_id = cs.classroom_id
+		WHERE cs.classroom_id = ?
+		GROUP BY s.student_id
+		ORDER BY s.name
+		LIMIT ? OFFSET ?
+	`, classroomID, pagination.PageSize, pagination.Offset).Scan(&results).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	response := NewPaginatedResponse(results, pagination, int(totalCount))
+	return &response, nil
+}
+
+// New paginated method for classroom engagement history
+func (r *eventRepository) GetClassroomEngagementHistory(classroomID uuid.UUID, dateRange time.Duration, pagination PaginationParams) (*PaginatedResponse[ClassroomEngagementData], error) {
+	var results []ClassroomEngagementData
+	var totalCount int64
+
+	cutoffTime := time.Now().Add(-dateRange)
+
+	// For this example, we'll return daily engagement data
+	// In a real implementation, you might want different time granularities
+
+	// Get total count of days in the range
+	err := r.db.Raw(`
+		SELECT COUNT(DISTINCT DATE(qs.started_at))
+		FROM quiz_sessions qs
+		WHERE qs.classroom_id = ? AND qs.started_at >= ?
+	`, classroomID, cutoffTime).Scan(&totalCount).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Get paginated daily engagement data
+	err = r.db.Raw(`
+		WITH daily_sessions AS (
+			SELECT 
+				DATE(qs.started_at) as session_date,
+				COUNT(DISTINCT qs.session_id) as daily_sessions,
+				COUNT(DISTINCT ase.student_id) as active_students,
+				COUNT(DISTINCT qpe.question_id) as total_questions,
+				COUNT(ase.event_id) as total_answers,
+				ROUND(AVG(CASE WHEN ase.is_correct THEN 1.0 ELSE 0.0 END) * 100, 2) as average_accuracy
+			FROM quiz_sessions qs
+			LEFT JOIN question_published_events qpe ON qpe.session_id = qs.session_id
+			LEFT JOIN answer_submitted_events ase ON ase.session_id = qs.session_id
+			WHERE qs.classroom_id = ? AND qs.started_at >= ?
+			GROUP BY DATE(qs.started_at)
+			ORDER BY session_date DESC
+			LIMIT ? OFFSET ?
+		),
+		classroom_info AS (
+			SELECT COUNT(*) as total_students
+			FROM classroom_students 
+			WHERE classroom_id = ?
+		)
+		SELECT 
+			ci.total_students,
+			ds.active_students,
+			ROUND(ds.active_students * 100.0 / ci.total_students, 2) as engagement_rate,
+			ds.average_accuracy,
+			ds.total_questions,
+			CASE 
+				WHEN ds.total_questions > 0 AND ds.active_students > 0 
+				THEN ROUND(ds.total_answers * 100.0 / (ds.active_students * ds.total_questions), 2)
+				ELSE 0.0 
+			END as response_rate
+		FROM daily_sessions ds
+		CROSS JOIN classroom_info ci
+	`, classroomID, cutoffTime, pagination.PageSize, pagination.Offset, classroomID).Scan(&results).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	response := NewPaginatedResponse(results, pagination, int(totalCount))
+	return &response, nil
 }

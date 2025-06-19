@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/rohanreddymelachervu/ingestor/internal/repository"
 )
 
 type Handler struct {
@@ -15,6 +16,13 @@ type Handler struct {
 
 func NewHandler(s *Service) *Handler {
 	return &Handler{service: s}
+}
+
+// Helper function to parse pagination parameters
+func parsePaginationParams(c *gin.Context) repository.PaginationParams {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "50"))
+	return repository.NewPaginationParams(page, pageSize)
 }
 
 func (h *Handler) GetActiveParticipants(c *gin.Context) {
@@ -37,7 +45,10 @@ func (h *Handler) GetActiveParticipants(c *gin.Context) {
 		return
 	}
 
-	data, err := h.service.GetActiveParticipants(sessionID, timeRange)
+	// Parse pagination parameters
+	pagination := parsePaginationParams(c)
+
+	data, err := h.service.GetActiveParticipants(sessionID, timeRange, pagination)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -275,6 +286,65 @@ func (h *Handler) GetDropoffAnalysis(c *gin.Context) {
 	}
 
 	data, err := h.service.GetDropoffAnalysis(sessionID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, data)
+}
+
+// New handler for paginated student performance list
+func (h *Handler) GetStudentPerformanceList(c *gin.Context) {
+	classroomIDStr := c.Query("classroom_id")
+	if classroomIDStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "classroom_id is required"})
+		return
+	}
+
+	classroomID, err := uuid.Parse(classroomIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid classroom_id format"})
+		return
+	}
+
+	// Parse pagination parameters
+	pagination := parsePaginationParams(c)
+
+	data, err := h.service.GetStudentPerformanceList(classroomID, pagination)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, data)
+}
+
+// New handler for paginated classroom engagement history
+func (h *Handler) GetClassroomEngagementHistory(c *gin.Context) {
+	classroomIDStr := c.Query("classroom_id")
+	if classroomIDStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "classroom_id is required"})
+		return
+	}
+
+	classroomID, err := uuid.Parse(classroomIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid classroom_id format"})
+		return
+	}
+
+	dateRangeStr := c.DefaultQuery("date_range", "7d")
+	dateRange, err := parseDateRange(dateRangeStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid date_range format"})
+		return
+	}
+
+	// Parse pagination parameters
+	pagination := parsePaginationParams(c)
+
+	data, err := h.service.GetClassroomEngagementHistory(classroomID, dateRange, pagination)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

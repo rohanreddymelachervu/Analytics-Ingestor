@@ -6,6 +6,64 @@ import (
 	"github.com/google/uuid"
 )
 
+// Pagination support
+type PaginationParams struct {
+	Page     int `json:"page" form:"page"`           // 1-based page number
+	PageSize int `json:"page_size" form:"page_size"` // Number of items per page
+	Offset   int `json:"-"`                          // Calculated offset (internal use)
+}
+
+type PaginatedResponse[T any] struct {
+	Data        []T  `json:"data"`
+	Page        int  `json:"page"`
+	PageSize    int  `json:"page_size"`
+	TotalCount  int  `json:"total_count"`
+	TotalPages  int  `json:"total_pages"`
+	HasMore     bool `json:"has_more"`
+	HasPrevious bool `json:"has_previous"`
+}
+
+// Helper function to create pagination params with defaults and validation
+func NewPaginationParams(page, pageSize int) PaginationParams {
+	// Set defaults
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 50 // Default page size
+	}
+
+	// Enforce maximum page size for performance
+	maxPageSize := 1000
+	if pageSize > maxPageSize {
+		pageSize = maxPageSize
+	}
+
+	return PaginationParams{
+		Page:     page,
+		PageSize: pageSize,
+		Offset:   (page - 1) * pageSize,
+	}
+}
+
+// Helper function to create paginated response
+func NewPaginatedResponse[T any](data []T, pagination PaginationParams, totalCount int) PaginatedResponse[T] {
+	totalPages := (totalCount + pagination.PageSize - 1) / pagination.PageSize
+	if totalPages == 0 {
+		totalPages = 1
+	}
+
+	return PaginatedResponse[T]{
+		Data:        data,
+		Page:        pagination.Page,
+		PageSize:    pagination.PageSize,
+		TotalCount:  totalCount,
+		TotalPages:  totalPages,
+		HasMore:     pagination.Page < totalPages,
+		HasPrevious: pagination.Page > 1,
+	}
+}
+
 // Report data structures
 type ParticipantMetrics struct {
 	StudentID uuid.UUID `json:"student_id"`

@@ -301,4 +301,111 @@ This project was developed as part of an engineering assessment for Superr.ai, d
 - ✅ **Three Report Types**: Student performance, classroom engagement, content effectiveness
 - ✅ **Scale Considerations**: Designed for 900K users across 1K schools
 
-This implementation provides a solid foundation for an educational analytics platform that can scale to support large educational institutions while maintaining performance and data integrity. 
+This implementation provides a solid foundation for an educational analytics platform that can scale to support large educational institutions while maintaining performance and data integrity.
+
+## 📊 Analytics Endpoints
+
+### Pagination Support (NEW! 🚀)
+
+All analytics endpoints now support pagination to handle large datasets efficiently:
+
+**Query Parameters:**
+- `page` (default: 1): Page number (1-based)
+- `page_size` (default: 50, max: 1000): Number of items per page
+
+**Response Format:**
+```json
+{
+  "data": [...],
+  "pagination": {
+    "page": 1,
+    "page_size": 50,
+    "total_count": 1250,
+    "total_pages": 25,
+    "has_more": true,
+    "has_previous": false
+  }
+}
+```
+
+### Core Analytics APIs
+
+1. **Active Participants** (Enhanced with Pagination)
+   ```bash
+   GET /api/reports/active-participants?session_id=<uuid>&time_range=60m&page=1&page_size=50
+   Authorization: Bearer <your-jwt-token>
+   ```
+
+2. **Questions Per Minute**
+   ```bash
+   GET /api/reports/questions-per-minute?session_id=<uuid>
+   Authorization: Bearer <your-jwt-token>
+   ```
+
+3. **Student Performance Analysis**
+   ```bash
+   GET /api/reports/student-performance?student_id=<uuid>&classroom_id=<uuid>
+   Authorization: Bearer <your-jwt-token>
+   ```
+
+4. **Classroom Engagement Metrics**
+   ```bash
+   GET /api/reports/classroom-engagement?classroom_id=<uuid>&date_range=7d
+   Authorization: Bearer <your-jwt-token>
+   ```
+
+5. **Content Effectiveness Evaluation**
+   ```bash
+   GET /api/reports/content-effectiveness?quiz_id=<uuid>
+   Authorization: Bearer <your-jwt-token>
+   ```
+
+### New Paginated Endpoints for Large Datasets
+
+6. **Student Performance List** (New!)
+   ```bash
+   GET /api/reports/student-performance-list?classroom_id=<uuid>&page=1&page_size=100
+   Authorization: Bearer <your-jwt-token>
+   ```
+   
+   Returns paginated performance data for all students in a classroom.
+
+7. **Classroom Engagement History** (New!)
+   ```bash
+   GET /api/reports/classroom-engagement-history?classroom_id=<uuid>&date_range=30d&page=1&page_size=20
+   Authorization: Bearer <your-jwt-token>
+   ```
+   
+   Returns historical engagement data with daily granularity.
+
+### Additional Analytics
+
+8. **Response Rate Analysis**
+   ```bash
+   GET /api/reports/response-rate?session_id=<uuid>&question_id=<uuid>
+   Authorization: Bearer <your-jwt-token>
+   ```
+
+9. **Latency Analysis**
+   ```bash
+   GET /api/reports/latency-analysis?session_id=<uuid>&question_id=<uuid>
+   Authorization: Bearer <your-jwt-token>
+   ```
+
+10. **Timeout Analysis**
+    ```bash
+    GET /api/reports/timeout-analysis?session_id=<uuid>&question_id=<uuid>
+    Authorization: Bearer <your-jwt-token>
+    ```
+
+11. **Completion Rate**
+    ```bash
+    GET /api/reports/completion-rate?session_id=<uuid>
+    Authorization: Bearer <your-jwt-token>
+    ```
+
+12. **Drop-off Analysis**
+    ```bash
+    GET /api/reports/dropoff-analysis?session_id=<uuid>
+    Authorization: Bearer <your-jwt-token>
+    ``` 

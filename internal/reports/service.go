@@ -8,27 +8,41 @@ import (
 )
 
 type Service struct {
-	EventRepo repository.EventRepository
+	EventRepo     repository.EventRepository
+	ClassroomRepo repository.ClassroomRepository
 }
 
-func NewService(eventRepo repository.EventRepository) *Service {
+func NewService(eventRepo repository.EventRepository, classroomRepo repository.ClassroomRepository) *Service {
 	return &Service{
-		EventRepo: eventRepo,
+		EventRepo:     eventRepo,
+		ClassroomRepo: classroomRepo,
 	}
 }
 
-func (s *Service) GetActiveParticipants(sessionID uuid.UUID, timeRange time.Duration) (interface{}, error) {
-	participants, err := s.EventRepo.GetActiveParticipants(sessionID, timeRange)
+func (s *Service) GetActiveParticipants(sessionID uuid.UUID, timeRange time.Duration, pagination repository.PaginationParams) (interface{}, error) {
+	paginatedData, err := s.EventRepo.GetActiveParticipants(sessionID, timeRange, pagination)
 	if err != nil {
 		return nil, err
 	}
 
+	// Calculate average accuracy from the current page data
+	avgAccuracy := calculateAverageAccuracy(paginatedData.Data)
+
 	response := map[string]interface{}{
-		"session_id":               sessionID,
-		"time_range":               timeRange.String(),
-		"active_participants":      participants,
-		"total_participants":       len(participants),
-		"average_accuracy_percent": calculateAverageAccuracy(participants),
+		"session_id": sessionID,
+		"time_range": timeRange.String(),
+		"pagination": map[string]interface{}{
+			"page":         paginatedData.Page,
+			"page_size":    paginatedData.PageSize,
+			"total_count":  paginatedData.TotalCount,
+			"total_pages":  paginatedData.TotalPages,
+			"has_more":     paginatedData.HasMore,
+			"has_previous": paginatedData.HasPrevious,
+		},
+		"active_participants":      paginatedData.Data,
+		"total_participants":       paginatedData.TotalCount,
+		"page_participants":        len(paginatedData.Data),
+		"average_accuracy_percent": avgAccuracy,
 	}
 
 	return response, nil
@@ -314,4 +328,59 @@ func getDropoffRecommendations(dropoffs []repository.DropoffPoint) []string {
 	}
 
 	return recommendations
+}
+
+// New paginated service for student performance list
+func (s *Service) GetStudentPerformanceList(classroomID uuid.UUID, pagination repository.PaginationParams) (interface{}, error) {
+	paginatedData, err := s.EventRepo.GetStudentPerformanceList(classroomID, pagination)
+	if err != nil {
+		return nil, err
+	}
+
+	response := map[string]interface{}{
+		"classroom_id": classroomID,
+		"pagination": map[string]interface{}{
+			"page":         paginatedData.Page,
+			"page_size":    paginatedData.PageSize,
+			"total_count":  paginatedData.TotalCount,
+			"total_pages":  paginatedData.TotalPages,
+			"has_more":     paginatedData.HasMore,
+			"has_previous": paginatedData.HasPrevious,
+		},
+		"students": paginatedData.Data,
+		"summary": map[string]interface{}{
+			"total_students": paginatedData.TotalCount,
+			"page_students":  len(paginatedData.Data),
+		},
+	}
+
+	return response, nil
+}
+
+// New paginated service for classroom engagement history
+func (s *Service) GetClassroomEngagementHistory(classroomID uuid.UUID, dateRange time.Duration, pagination repository.PaginationParams) (interface{}, error) {
+	paginatedData, err := s.EventRepo.GetClassroomEngagementHistory(classroomID, dateRange, pagination)
+	if err != nil {
+		return nil, err
+	}
+
+	response := map[string]interface{}{
+		"classroom_id": classroomID,
+		"date_range":   dateRange.String(),
+		"pagination": map[string]interface{}{
+			"page":         paginatedData.Page,
+			"page_size":    paginatedData.PageSize,
+			"total_count":  paginatedData.TotalCount,
+			"total_pages":  paginatedData.TotalPages,
+			"has_more":     paginatedData.HasMore,
+			"has_previous": paginatedData.HasPrevious,
+		},
+		"engagement_history": paginatedData.Data,
+		"summary": map[string]interface{}{
+			"total_periods": paginatedData.TotalCount,
+			"page_periods":  len(paginatedData.Data),
+		},
+	}
+
+	return response, nil
 }

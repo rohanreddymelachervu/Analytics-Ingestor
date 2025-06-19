@@ -8,7 +8,6 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
-	"github.com/rohanreddymelachervu/ingestor/internal/auth"
 	"github.com/rohanreddymelachervu/ingestor/internal/config"
 	"github.com/rohanreddymelachervu/ingestor/internal/server"
 )
@@ -30,10 +29,7 @@ func main() {
 	// Initialize Gin router
 	r := gin.Default()
 
-	// Setup routes
-	authService := auth.NewService(db, cfg.JWTSecret)
-	authHandler := auth.NewHandler(authService)
-	server.RegisterRoutes(r, authHandler, cfg.JWTSecret, db)
+	server.RegisterRoutes(r, cfg.JWTSecret, db)
 
 	// Start server
 	port := os.Getenv("PORT")
