@@ -1,16 +1,31 @@
 package server
 
 import (
-	"net/http"
-
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"github.com/rohanreddymelachervu/ingestor/internal/auth"
+	"github.com/rohanreddymelachervu/ingestor/internal/events"
+	"github.com/rohanreddymelachervu/ingestor/internal/reports"
+	"github.com/rohanreddymelachervu/ingestor/internal/repository"
 )
 
-// RegisterRoutes sets up all endpoints with auth middleware
-// RegisterRoutes sets up all endpoints with proper middleware placement
-func RegisterRoutes(r *gin.Engine, authHandler *auth.Handler, jwtSecret string) {
+// RegisterRoutes sets up all endpoints with proper clean architecture
+func RegisterRoutes(r *gin.Engine, authHandler *auth.Handler, jwtSecret string, db *gorm.DB) {
+	// Initialize repositories
+	eventRepo := repository.NewEventRepository(db)
+	quizRepo := repository.NewQuizRepository(db)
+	sessionRepo := repository.NewSessionRepository(db)
+	classroomRepo := repository.NewClassroomRepository(db)
+
+	// Initialize services
+	eventsService := events.NewService(eventRepo, quizRepo, sessionRepo, classroomRepo)
+	reportsService := reports.NewService(eventRepo)
+
+	// Initialize handlers
+	eventsHandler := events.NewHandler(eventsService)
+	reportsHandler := reports.NewHandler(reportsService)
+
 	api := r.Group("/api")
 	{
 		// Public auth endpoints (no JWT required)
@@ -24,61 +39,29 @@ func RegisterRoutes(r *gin.Engine, authHandler *auth.Handler, jwtSecret string) 
 		secured := api.Group("")
 		secured.Use(auth.AuthMiddleware(jwtSecret))
 		{
-			// Event ingestion: WRITE scope required
-			events := secured.Group("")
-			events.Use(auth.RequireScope("WRITE"))
+			// Event ingestion: WRITE scope required (for Whiteboard & Notebook apps)
+			eventsGroup := secured.Group("")
+			eventsGroup.Use(auth.RequireScope("WRITE"))
 			{
-				events.POST("/events", handleCreateEvent)
-				events.POST("/events/batch", handleCreateBatchEvents)
+				eventsGroup.POST("/events", eventsHandler.CreateEvent)
+				eventsGroup.POST("/events/batch", eventsHandler.CreateBatchEvents)
 			}
 
-			// Reporting: READ scope required
-			reports := secured.Group("/reports")
-			reports.Use(auth.RequireScope("READ"))
+			// Reporting: READ scope required (for Analytics Dashboard)
+			reportsGroup := secured.Group("/reports")
+			reportsGroup.Use(auth.RequireScope("READ"))
 			{
-				reports.GET("/active-participants", handleActiveParticipants)
-				reports.GET("/questions-per-minute", handleQuestionsPerMinute)
+				reportsGroup.GET("/active-participants", reportsHandler.GetActiveParticipants)
+				reportsGroup.GET("/questions-per-minute", reportsHandler.GetQuestionsPerMinute)
+				reportsGroup.GET("/student-performance", reportsHandler.GetStudentPerformance)
+				reportsGroup.GET("/classroom-engagement", reportsHandler.GetClassroomEngagement)
+				reportsGroup.GET("/content-effectiveness", reportsHandler.GetContentEffectiveness)
+				reportsGroup.GET("/response-rate", reportsHandler.GetResponseRate)
+				reportsGroup.GET("/latency-analysis", reportsHandler.GetLatencyAnalysis)
+				reportsGroup.GET("/timeout-analysis", reportsHandler.GetTimeoutAnalysis)
+				reportsGroup.GET("/completion-rate", reportsHandler.GetCompletionRate)
+				reportsGroup.GET("/dropoff-analysis", reportsHandler.GetDropoffAnalysis)
 			}
 		}
 	}
-}
-
-// Placeholder handlers - implement your business logic here
-func handleCreateEvent(c *gin.Context) {
-	// Extract user ID from context (set by AuthMiddleware)
-	userID, _ := c.Get("userID")
-	
-	c.JSON(http.StatusCreated, gin.H{
-		"message": "Event created successfully",
-		"user_id": userID,
-	})
-}
-
-func handleCreateBatchEvents(c *gin.Context) {
-	userID, _ := c.Get("userID")
-	
-	c.JSON(http.StatusCreated, gin.H{
-		"message": "Batch events created successfully", 
-		"user_id": userID,
-	})
-}
-
-func handleActiveParticipants(c *gin.Context) {
-	userID, _ := c.Get("userID")
-	
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Active participants report",
-		"user_id": userID,
-		"data": []string{"participant1", "participant2"},
-	})
-}
-
-func handleQuestionsPerMinute(c *gin.Context) {
-	userID, _ := c.Get("userID")
-	
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Questions per minute report",
-		"user_id": userID, 
-		"data": map[string]int{"questions_per_minute": 5},
-	})
 }

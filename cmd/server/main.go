@@ -23,18 +23,23 @@ func main() {
 		log.Fatalf("failed to connect database: %v", err)
 	}
 
+	// Skip auto-migration since we have explicit migration files
+	// The database schema is managed by the migration files in migrations/postgres/
+	log.Println("Using existing database schema from migration files")
+
 	// Initialize Gin router
 	r := gin.Default()
 
 	// Setup routes
 	authService := auth.NewService(db, cfg.JWTSecret)
 	authHandler := auth.NewHandler(authService)
-	server.RegisterRoutes(r, authHandler, cfg.JWTSecret)
+	server.RegisterRoutes(r, authHandler, cfg.JWTSecret, db)
 
 	// Start server
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
+	log.Printf("Server starting on port %s", port)
 	r.Run(":" + port)
 }
