@@ -152,3 +152,112 @@ type DropoffPoint struct {
 	StudentsAtEnd   int       `json:"students_at_end"`
 	DropoffRate     float64   `json:"dropoff_rate"`
 }
+
+// NEW: Missing basic metrics data structures
+
+// Quiz Summary - aggregates across all sessions and classrooms
+type QuizSummaryData struct {
+	QuizID             uuid.UUID  `json:"quiz_id"`
+	Title              string     `json:"title"`
+	TotalSessions      int        `json:"total_sessions"`
+	TotalClassrooms    int        `json:"total_classrooms"`
+	TotalStudents      int        `json:"total_students"`
+	TotalQuestions     int        `json:"total_questions"`
+	AverageAccuracy    float64    `json:"average_accuracy"`
+	AverageCompletion  float64    `json:"average_completion"`
+	OverallEngagement  float64    `json:"overall_engagement"`
+	FirstUsed          *time.Time `json:"first_used"`
+	LastUsed           *time.Time `json:"last_used"`
+	EffectivenessScore float64    `json:"effectiveness_score"`
+}
+
+// Question Analysis - performance of individual questions across all sessions
+type QuestionAnalysisData struct {
+	QuestionID          uuid.UUID      `json:"question_id"`
+	QuizID              uuid.UUID      `json:"quiz_id"`
+	TotalAttempts       int            `json:"total_attempts"`
+	CorrectAttempts     int            `json:"correct_attempts"`
+	AccuracyRate        float64        `json:"accuracy_rate"`
+	AverageResponseTime float64        `json:"average_response_time_seconds"`
+	DifficultyRating    string         `json:"difficulty_rating"`
+	AnswerDistribution  map[string]int `json:"answer_distribution"`
+	UsageCount          int            `json:"usage_count"` // times this question was published
+}
+
+// Session Comparison - compare sessions within classroom or across classrooms
+type SessionComparisonData struct {
+	SessionID             uuid.UUID `json:"session_id"`
+	QuizTitle             string    `json:"quiz_title"`
+	ClassroomName         string    `json:"classroom_name"`
+	StartedAt             time.Time `json:"started_at"`
+	Duration              *string   `json:"duration"` // nullable if session not ended
+	TotalStudents         int       `json:"total_students"`
+	ParticipatingStudents int       `json:"participating_students"`
+	TotalQuestions        int       `json:"total_questions"`
+	AverageAccuracy       float64   `json:"average_accuracy"`
+	CompletionRate        float64   `json:"completion_rate"`
+	EngagementScore       float64   `json:"engagement_score"`
+}
+
+// Student Rankings - leaderboard and comparative performance
+type StudentRankingData struct {
+	StudentID            uuid.UUID `json:"student_id"`
+	StudentName          string    `json:"student_name"`
+	QuestionsAttempted   int       `json:"questions_attempted"`
+	CorrectAnswers       int       `json:"correct_answers"`
+	AccuracyRate         float64   `json:"accuracy_rate"`
+	AverageResponseTime  float64   `json:"average_response_time_seconds"`
+	Rank                 int       `json:"rank"`
+	Percentile           float64   `json:"percentile"`
+	SessionsParticipated int       `json:"sessions_participated"`
+}
+
+// Answer Distribution for question analysis
+type AnswerDistribution struct {
+	Answer     string  `json:"answer"`
+	Count      int     `json:"count"`
+	Percentage float64 `json:"percentage"`
+}
+
+// NEW: Basic Overview Data Structures
+
+// Classroom Overview Dashboard - Basic stats
+type ClassroomOverviewData struct {
+	ClassroomID    uuid.UUID  `json:"classroom_id"`
+	ClassroomName  string     `json:"classroom_name"`
+	TotalStudents  int        `json:"total_students"`
+	ActiveStudents int        `json:"active_students"` // students who participated in last 30 days
+	TotalSessions  int        `json:"total_sessions"`
+	RecentSessions int        `json:"recent_sessions"` // sessions in last 7 days
+	LastActivity   *time.Time `json:"last_activity"`
+	CreatedAt      time.Time  `json:"created_at"`
+}
+
+// Class Performance Summary - Overall class averages and participation
+type ClassPerformanceSummaryData struct {
+	ClassroomID            uuid.UUID `json:"classroom_id"`
+	ClassroomName          string    `json:"classroom_name"`
+	TotalStudents          int       `json:"total_students"`
+	ParticipatingStudents  int       `json:"participating_students"`
+	OverallAccuracy        float64   `json:"overall_accuracy"`
+	OverallParticipation   float64   `json:"overall_participation_rate"`
+	TotalQuizzesTaken      int       `json:"total_quizzes_taken"`
+	TotalQuestionsAnswered int       `json:"total_questions_answered"`
+	AverageResponseTime    float64   `json:"average_response_time_seconds"`
+	SessionCount           int       `json:"session_count"`
+}
+
+// Student Activity Summary - Total quizzes and sessions participated
+type StudentActivitySummaryData struct {
+	StudentID                 uuid.UUID  `json:"student_id"`
+	StudentName               string     `json:"student_name"`
+	ClassroomID               uuid.UUID  `json:"classroom_id"`
+	ClassroomName             string     `json:"classroom_name"`
+	TotalSessionsParticipated int        `json:"total_sessions_participated"`
+	UniqueQuizzesTaken        int        `json:"unique_quizzes_taken"`
+	TotalQuestionsAnswered    int        `json:"total_questions_answered"`
+	OverallAccuracy           float64    `json:"overall_accuracy"`
+	AverageResponseTime       float64    `json:"average_response_time_seconds"`
+	FirstActivity             *time.Time `json:"first_activity"`
+	LastActivity              *time.Time `json:"last_activity"`
+}

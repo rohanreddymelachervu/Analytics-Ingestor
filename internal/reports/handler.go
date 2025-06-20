@@ -377,3 +377,233 @@ func parseDateRange(rangeStr string) (time.Duration, error) {
 		return time.ParseDuration(rangeStr)
 	}
 }
+
+// NEW: Missing basic metrics handlers
+
+func (h *Handler) GetQuizSummary(c *gin.Context) {
+	quizIDStr := c.Query("quiz_id")
+	if quizIDStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "quiz_id is required"})
+		return
+	}
+
+	quizID, err := uuid.Parse(quizIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid quiz_id format"})
+		return
+	}
+
+	data, err := h.service.GetQuizSummary(quizID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, data)
+}
+
+func (h *Handler) GetQuestionAnalysis(c *gin.Context) {
+	questionIDStr := c.Query("question_id")
+	if questionIDStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "question_id is required"})
+		return
+	}
+
+	questionID, err := uuid.Parse(questionIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid question_id format"})
+		return
+	}
+
+	data, err := h.service.GetQuestionAnalysis(questionID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, data)
+}
+
+func (h *Handler) GetQuizQuestionsList(c *gin.Context) {
+	quizIDStr := c.Query("quiz_id")
+	if quizIDStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "quiz_id is required"})
+		return
+	}
+
+	quizID, err := uuid.Parse(quizIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid quiz_id format"})
+		return
+	}
+
+	// Parse pagination parameters
+	pagination := parsePaginationParams(c)
+
+	data, err := h.service.GetQuizQuestionsList(quizID, pagination)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, data)
+}
+
+func (h *Handler) GetClassroomSessions(c *gin.Context) {
+	classroomIDStr := c.Query("classroom_id")
+	if classroomIDStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "classroom_id is required"})
+		return
+	}
+
+	classroomID, err := uuid.Parse(classroomIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid classroom_id format"})
+		return
+	}
+
+	// Parse pagination parameters
+	pagination := parsePaginationParams(c)
+
+	data, err := h.service.GetClassroomSessions(classroomID, pagination)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, data)
+}
+
+func (h *Handler) GetQuizSessions(c *gin.Context) {
+	quizIDStr := c.Query("quiz_id")
+	if quizIDStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "quiz_id is required"})
+		return
+	}
+
+	quizID, err := uuid.Parse(quizIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid quiz_id format"})
+		return
+	}
+
+	// Parse pagination parameters
+	pagination := parsePaginationParams(c)
+
+	data, err := h.service.GetQuizSessions(quizID, pagination)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, data)
+}
+
+func (h *Handler) GetClassroomStudentRankings(c *gin.Context) {
+	classroomIDStr := c.Query("classroom_id")
+	if classroomIDStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "classroom_id is required"})
+		return
+	}
+
+	classroomID, err := uuid.Parse(classroomIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid classroom_id format"})
+		return
+	}
+
+	// Parse pagination parameters
+	pagination := parsePaginationParams(c)
+
+	data, err := h.service.GetClassroomStudentRankings(classroomID, pagination)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, data)
+}
+
+func (h *Handler) GetSessionStudentRankings(c *gin.Context) {
+	sessionIDStr := c.Query("session_id")
+	if sessionIDStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "session_id is required"})
+		return
+	}
+
+	sessionID, err := uuid.Parse(sessionIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid session_id format"})
+		return
+	}
+
+	// Parse pagination parameters
+	pagination := parsePaginationParams(c)
+
+	data, err := h.service.GetSessionStudentRankings(sessionID, pagination)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, data)
+}
+
+// NEW: Basic Overview HTTP Handlers
+
+// GetClassroomOverview handles GET /api/reports/classroom-overview
+func (h *Handler) GetClassroomOverview(c *gin.Context) {
+	classroomID, err := uuid.Parse(c.Query("classroom_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid classroom_id format"})
+		return
+	}
+
+	response, err := h.service.GetClassroomOverview(classroomID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get classroom overview"})
+		return
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// GetClassPerformanceSummary handles GET /api/reports/class-performance-summary
+func (h *Handler) GetClassPerformanceSummary(c *gin.Context) {
+	classroomID, err := uuid.Parse(c.Query("classroom_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid classroom_id format"})
+		return
+	}
+
+	response, err := h.service.GetClassPerformanceSummary(classroomID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get class performance summary"})
+		return
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// GetStudentActivitySummary handles GET /api/reports/student-activity-summary
+func (h *Handler) GetStudentActivitySummary(c *gin.Context) {
+	studentID, err := uuid.Parse(c.Query("student_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid student_id format"})
+		return
+	}
+
+	classroomID, err := uuid.Parse(c.Query("classroom_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid classroom_id format"})
+		return
+	}
+
+	response, err := h.service.GetStudentActivitySummary(studentID, classroomID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get student activity summary"})
+		return
+	}
+
+	c.JSON(http.StatusOK, response)
+}

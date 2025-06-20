@@ -100,6 +100,16 @@ func RegisterRoutes(r *gin.Engine, jwtSecret string, db *gorm.DB) {
 				reportsGroup.GET("/dropoff-analysis", reportsHandler.GetDropoffAnalysis)
 				reportsGroup.GET("/student-performance-list", reportsHandler.GetStudentPerformanceList)
 				reportsGroup.GET("/classroom-engagement-history", reportsHandler.GetClassroomEngagementHistory)
+				reportsGroup.GET("/quiz-summary", reportsHandler.GetQuizSummary)
+				reportsGroup.GET("/question-analysis", reportsHandler.GetQuestionAnalysis)
+				reportsGroup.GET("/quiz-questions-list", reportsHandler.GetQuizQuestionsList)
+				reportsGroup.GET("/classroom-sessions", reportsHandler.GetClassroomSessions)
+				reportsGroup.GET("/quiz-sessions", reportsHandler.GetQuizSessions)
+				reportsGroup.GET("/classroom-student-rankings", reportsHandler.GetClassroomStudentRankings)
+				reportsGroup.GET("/session-student-rankings", reportsHandler.GetSessionStudentRankings)
+				reportsGroup.GET("/classroom-overview", reportsHandler.GetClassroomOverview)
+				reportsGroup.GET("/class-performance-summary", reportsHandler.GetClassPerformanceSummary)
+				reportsGroup.GET("/student-activity-summary", reportsHandler.GetStudentActivitySummary)
 			}
 		}
 	}
