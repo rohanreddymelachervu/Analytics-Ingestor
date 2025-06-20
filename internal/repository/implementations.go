@@ -1199,3 +1199,51 @@ func (r *eventRepository) GetStudentActivitySummary(studentID, classroomID uuid.
 
 	return &summary, err
 }
+
+// ExecuteGenericQuery executes a generic SQL query for cube.dev-style analytics
+func (r *eventRepository) ExecuteGenericQuery(sql string) ([]map[string]interface{}, error) {
+	var results []map[string]interface{}
+
+	rows, err := r.db.Raw(sql).Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	// Get column names
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+
+	// Process each row
+	for rows.Next() {
+		// Create a slice to hold the values
+		values := make([]interface{}, len(columns))
+		valuePtrs := make([]interface{}, len(columns))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+
+		// Scan the row
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return nil, err
+		}
+
+		// Create a map for this row
+		row := make(map[string]interface{})
+		for i, col := range columns {
+			val := values[i]
+			// Convert byte arrays to strings for better JSON serialization
+			if b, ok := val.([]byte); ok {
+				row[col] = string(b)
+			} else {
+				row[col] = val
+			}
+		}
+
+		results = append(results, row)
+	}
+
+	return results, rows.Err()
+}

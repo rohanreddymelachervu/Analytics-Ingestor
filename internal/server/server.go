@@ -110,6 +110,9 @@ func RegisterRoutes(r *gin.Engine, jwtSecret string, db *gorm.DB) {
 				reportsGroup.GET("/classroom-overview", reportsHandler.GetClassroomOverview)
 				reportsGroup.GET("/class-performance-summary", reportsHandler.GetClassPerformanceSummary)
 				reportsGroup.GET("/student-activity-summary", reportsHandler.GetStudentActivitySummary)
+
+				// Generic Query: cube.dev-style analytics with measures and dimensions
+				reportsGroup.POST("/query", reportsHandler.GenericQuery)
 			}
 		}
 	}
