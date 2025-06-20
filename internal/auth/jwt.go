@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dgrijalva/jwt-go"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 // GenerateJWT creates a token with embedded scopes (e.g. "READ", "WRITE")
@@ -12,9 +12,9 @@ func GenerateJWT(userID uint, secret string, scopes []string) (string, error) {
 	claims := Claims{
 		UserID: userID,
 		Scopes: scopes,
-		StandardClaims: jwt.StandardClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   fmt.Sprint(userID),
-			ExpiresAt: time.Now().Add(24 * time.Hour).Unix(),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -25,5 +25,5 @@ func GenerateJWT(userID uint, secret string, scopes []string) (string, error) {
 type Claims struct {
 	UserID uint     `json:"user_id"`
 	Scopes []string `json:"scopes"`
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 }

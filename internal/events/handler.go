@@ -2,39 +2,39 @@ package events
 
 import (
 	"fmt"
+	"log"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rohanreddymelachervu/ingestor/internal/kafka"
+	"github.com/rohanreddymelachervu/ingestor/internal/models"
 )
 
 type Handler struct {
-	service *Service
+	service   *Service
+	kafkaMode bool
+	producer  *kafka.Producer
 }
 
+// NewHandler creates a handler with direct database processing (default mode)
 func NewHandler(s *Service) *Handler {
-	return &Handler{service: s}
+	return &Handler{
+		service:   s,
+		kafkaMode: false,
+	}
 }
 
-// Event payload structure matching the user's specification
-type EventPayload struct {
-	EventID     string    `json:"event_id" binding:"required"`
-	EventType   string    `json:"event_type" binding:"required"`
-	Timestamp   time.Time `json:"timestamp" binding:"required"`
-	SessionID   string    `json:"session_id" binding:"required"`
-	QuizID      string    `json:"quiz_id" binding:"required"`
-	ClassroomID string    `json:"classroom_id" binding:"required"`
-	QuestionID  string    `json:"question_id" binding:"required"`
-	TeacherID   *string   `json:"teacher_id,omitempty"`
-	TimerSec    *int      `json:"timer_sec,omitempty"`
-	// Additional fields for ANSWER_SUBMITTED events
-	StudentID      *string `json:"student_id,omitempty"`
-	Answer         *string `json:"answer,omitempty"`
-	ResponseTimeMs *int    `json:"response_time_ms,omitempty"`
+// NewHandlerWithKafka creates a handler with Kafka producer for event publishing
+func NewHandlerWithKafka(s *Service, producer *kafka.Producer) *Handler {
+	return &Handler{
+		service:   s,
+		kafkaMode: true,
+		producer:  producer,
+	}
 }
 
 func (h *Handler) CreateEvent(c *gin.Context) {
-	var event EventPayload
+	var event models.EventPayload
 	if err := c.ShouldBindJSON(&event); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -42,21 +42,44 @@ func (h *Handler) CreateEvent(c *gin.Context) {
 
 	userID, _ := c.Get("userID")
 
-	err := h.service.ProcessEvent(event, userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
+	if h.kafkaMode && h.producer != nil {
+		// Kafka mode: publish to topic
+		err := h.producer.PublishEvent(event.EventID, event.EventType, event.SessionID, event)
+		if err != nil {
+			log.Printf("Failed to publish to Kafka, falling back to direct processing: %v", err)
+			// Fallback to direct processing if Kafka fails
+			err = h.service.ProcessEvent(event, userID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+		}
 
-	c.JSON(http.StatusCreated, gin.H{
-		"message":   "Event processed successfully",
-		"event_id":  event.EventID,
-		"timestamp": event.Timestamp,
-	})
+		c.JSON(http.StatusCreated, gin.H{
+			"message":   "Event queued successfully",
+			"event_id":  event.EventID,
+			"timestamp": event.Timestamp,
+			"mode":      "kafka",
+		})
+	} else {
+		// Direct mode: process immediately
+		err := h.service.ProcessEvent(event, userID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusCreated, gin.H{
+			"message":   "Event processed successfully",
+			"event_id":  event.EventID,
+			"timestamp": event.Timestamp,
+			"mode":      "direct",
+		})
+	}
 }
 
 func (h *Handler) CreateBatchEvents(c *gin.Context) {
-	var events []EventPayload
+	var events []models.EventPayload
 	if err := c.ShouldBindJSON(&events); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -67,12 +90,35 @@ func (h *Handler) CreateBatchEvents(c *gin.Context) {
 	errors := []string{}
 
 	for _, event := range events {
-		err := h.service.ProcessEvent(event, userID)
-		if err != nil {
-			errors = append(errors, fmt.Sprintf("Event %s: %s", event.EventID, err.Error()))
+		if h.kafkaMode && h.producer != nil {
+			// Kafka mode: publish each event
+			err := h.producer.PublishEvent(event.EventID, event.EventType, event.SessionID, event)
+			if err != nil {
+				log.Printf("Failed to publish event %s to Kafka: %v", event.EventID, err)
+				// Try direct processing as fallback
+				err = h.service.ProcessEvent(event, userID)
+				if err != nil {
+					errors = append(errors, fmt.Sprintf("Event %s: %s", event.EventID, err.Error()))
+				} else {
+					processedCount++
+				}
+			} else {
+				processedCount++
+			}
 		} else {
-			processedCount++
+			// Direct mode: process immediately
+			err := h.service.ProcessEvent(event, userID)
+			if err != nil {
+				errors = append(errors, fmt.Sprintf("Event %s: %s", event.EventID, err.Error()))
+			} else {
+				processedCount++
+			}
 		}
+	}
+
+	mode := "direct"
+	if h.kafkaMode {
+		mode = "kafka"
 	}
 
 	response := gin.H{
@@ -80,6 +126,7 @@ func (h *Handler) CreateBatchEvents(c *gin.Context) {
 		"user_id":         userID,
 		"processed_count": processedCount,
 		"total_events":    len(events),
+		"mode":            mode,
 	}
 
 	if len(errors) > 0 {
