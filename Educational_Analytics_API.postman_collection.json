@@ -1078,6 +1078,130 @@
 							"path": ["reports", "query"]
 						}
 					}
+				},
+				{
+					"name": "Student Performance Analysis",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{reader_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"measures\": [\n        \"total_answers\",\n        \"correct_answers\",\n        \"wrong_answers\",\n        \"accuracy_rate\",\n        \"response_time_avg\",\n        \"response_time_min\",\n        \"response_time_max\",\n        \"performance_variance\"\n    ],\n    \"dimensions\": [\"student_name\", \"performance_level\", \"speed_category\"],\n    \"order_by\": [{\"field\": \"accuracy_rate\", \"order\": \"DESC\"}],\n    \"limit\": 10\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/reports/query",
+							"host": ["{{base_url}}"],
+							"path": ["reports", "query"]
+						}
+					}
+				},
+				{
+					"name": "Classroom Engagement Metrics",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{reader_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"measures\": [\n        \"participation_rate\",\n        \"engagement_score\",\n        \"session_completion_rate\",\n        \"unique_sessions\",\n        \"questions_per_minute\",\n        \"active_students\"\n    ],\n    \"dimensions\": [\"classroom_name\", \"engagement_level\", \"session_duration_category\"],\n    \"order_by\": [{\"field\": \"engagement_score\", \"order\": \"DESC\"}]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/reports/query",
+							"host": ["{{base_url}}"],
+							"path": ["reports", "query"]
+						}
+					}
+				},
+				{
+					"name": "Content Effectiveness Evaluation",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{reader_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"measures\": [\n        \"question_difficulty_score\",\n        \"content_effectiveness_score\",\n        \"time_to_first_answer\",\n        \"question_engagement_rate\",\n        \"quiz_completion_rate\",\n        \"accuracy_rate\"\n    ],\n    \"dimensions\": [\"quiz_title\", \"difficulty_level\", \"timer_duration_category\"],\n    \"order_by\": [{\"field\": \"content_effectiveness_score\", \"order\": \"DESC\"}]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/reports/query",
+							"host": ["{{base_url}}"],
+							"path": ["reports", "query"]
+						}
+					}
+				},
+				{
+					"name": "Temporal Learning Patterns",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{reader_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"measures\": [\"total_answers\", \"accuracy_rate\", \"active_students\", \"engagement_score\"],\n    \"dimensions\": [\"event_day_of_week\", \"time_bucket\", \"event_week\"],\n    \"order_by\": [{\"field\": \"event_week\", \"order\": \"ASC\"}]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/reports/query",
+							"host": ["{{base_url}}"],
+							"path": ["reports", "query"]
+						}
+					}
 				}
 			]
 		},
