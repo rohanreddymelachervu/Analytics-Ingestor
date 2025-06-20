@@ -54,6 +54,9 @@ type EventRepository interface {
 	GetClassPerformanceSummary(classroomID uuid.UUID) (*ClassPerformanceSummaryData, error)
 	// Student activity summary - participation and quiz history
 	GetStudentActivitySummary(studentID, classroomID uuid.UUID) (*StudentActivitySummaryData, error)
+
+	// Generic query execution for cube.dev-style analytics
+	ExecuteGenericQuery(sql string) ([]map[string]interface{}, error)
 }
 
 // QuizRepository handles quiz-related operations

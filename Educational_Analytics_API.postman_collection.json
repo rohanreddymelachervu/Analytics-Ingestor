@@ -891,6 +891,197 @@
 			]
 		},
 		{
+			"name": "🧊 Generic Query (Cube.dev Style)",
+			"item": [
+				{
+					"name": "Basic Measures Only",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{reader_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"measures\": [\"total_answers\", \"accuracy_rate\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/reports/query",
+							"host": ["{{base_url}}"],
+							"path": ["reports", "query"]
+						}
+					}
+				},
+				{
+					"name": "Measures with Dimensions",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{reader_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"measures\": [\"total_answers\", \"correct_answers\", \"accuracy_rate\"],\n    \"dimensions\": [\"classroom_name\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/reports/query",
+							"host": ["{{base_url}}"],
+							"path": ["reports", "query"]
+						}
+					}
+				},
+				{
+					"name": "Student Performance Breakdown",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{reader_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"measures\": [\"total_answers\", \"correct_answers\", \"accuracy_rate\"],\n    \"dimensions\": [\"student_name\"],\n    \"order_by\": [{\"field\": \"accuracy_rate\", \"order\": \"DESC\"}],\n    \"limit\": 5\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/reports/query",
+							"host": ["{{base_url}}"],
+							"path": ["reports", "query"]
+						}
+					}
+				},
+				{
+					"name": "Question Effectiveness Analysis",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{reader_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"measures\": [\"total_answers\", \"correct_answers\", \"accuracy_rate\"],\n    \"dimensions\": [\"question_id\", \"answer_option\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/reports/query",
+							"host": ["{{base_url}}"],
+							"path": ["reports", "query"]
+						}
+					}
+				},
+				{
+					"name": "Time-based Analysis",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{reader_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"measures\": [\"total_answers\", \"active_students\"],\n    \"dimensions\": [\"event_date\", \"classroom_name\"],\n    \"time_range\": {\n        \"start\": \"2025-06-20T00:00:00Z\",\n        \"end\": \"2025-06-20T23:59:59Z\"\n    }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/reports/query",
+							"host": ["{{base_url}}"],
+							"path": ["reports", "query"]
+						}
+					}
+				},
+				{
+					"name": "Comprehensive Dashboard",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{reader_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"measures\": [\n        \"total_answers\",\n        \"correct_answers\",\n        \"accuracy_rate\",\n        \"active_students\",\n        \"response_time_avg\"\n    ],\n    \"dimensions\": [\"classroom_name\", \"session_id\"],\n    \"order_by\": [\n        {\"field\": \"accuracy_rate\", \"order\": \"DESC\"},\n        {\"field\": \"total_answers\", \"order\": \"DESC\"}\n    ],\n    \"limit\": 10\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/reports/query",
+							"host": ["{{base_url}}"],
+							"path": ["reports", "query"]
+						}
+					}
+				}
+			]
+		},
+		{
 			"name": "⚡ Performance Analytics",
 			"item": [
 				{

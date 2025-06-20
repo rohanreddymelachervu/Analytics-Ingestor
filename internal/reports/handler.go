@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/rohanreddymelachervu/ingestor/internal/analytics"
 	"github.com/rohanreddymelachervu/ingestor/internal/repository"
 )
 
@@ -603,6 +604,52 @@ func (h *Handler) GetStudentActivitySummary(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get student activity summary"})
 		return
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// GenericQuery handles cube.dev-style analytics queries with measures and dimensions
+func (h *Handler) GenericQuery(c *gin.Context) {
+	var request analytics.QueryRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format", "details": err.Error()})
+		return
+	}
+
+	// Validate that at least one measure or dimension is requested
+	if len(request.Measures) == 0 && len(request.Dimensions) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "At least one measure or dimension must be specified"})
+		return
+	}
+
+	// Generate SQL from the query request
+	sql, err := request.BuildSQL()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to build query", "details": err.Error()})
+		return
+	}
+
+	// Execute the generated SQL
+	results, err := h.service.ExecuteGenericQuery(sql)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to execute query", "details": err.Error()})
+		return
+	}
+
+	// Return successful response with query metadata
+	response := gin.H{
+		"query": gin.H{
+			"measures":   request.Measures,
+			"dimensions": request.Dimensions,
+			"filters":    request.Filters,
+			"time_range": request.TimeRange,
+			"limit":      request.Limit,
+			"order_by":   request.OrderBy,
+		},
+		"data":          results,
+		"generated_sql": sql,
+		"count":         len(results),
 	}
 
 	c.JSON(http.StatusOK, response)

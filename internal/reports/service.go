@@ -893,8 +893,12 @@ func calculateQuestionsPerSession(totalQuestions, totalSessions int) float64 {
 
 func calculateQuizVarietyScore(uniqueQuizzes, totalSessions int) float64 {
 	if totalSessions == 0 {
-		return 0.0
+		return 0
 	}
-	score := float64(uniqueQuizzes) / float64(totalSessions) * 100
-	return math.Round(score*100) / 100
+	return math.Min(float64(uniqueQuizzes)/float64(totalSessions)*100, 100)
+}
+
+// ExecuteGenericQuery executes a generic SQL query for cube.dev-style analytics
+func (s *Service) ExecuteGenericQuery(sql string) ([]map[string]interface{}, error) {
+	return s.EventRepo.ExecuteGenericQuery(sql)
 }
