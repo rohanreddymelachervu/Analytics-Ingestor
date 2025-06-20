@@ -30,6 +30,30 @@ type EventRepository interface {
 	// Paginated methods for large result sets
 	GetStudentPerformanceList(classroomID uuid.UUID, pagination PaginationParams) (*PaginatedResponse[StudentPerformanceData], error)
 	GetClassroomEngagementHistory(classroomID uuid.UUID, dateRange time.Duration, pagination PaginationParams) (*PaginatedResponse[ClassroomEngagementData], error)
+
+	// NEW: Missing basic metrics methods
+	// Quiz-level analytics across all sessions and classrooms
+	GetQuizSummary(quizID uuid.UUID) (*QuizSummaryData, error)
+
+	// Question-level analytics across all sessions
+	GetQuestionAnalysis(questionID uuid.UUID) (*QuestionAnalysisData, error)
+	GetQuizQuestionsList(quizID uuid.UUID, pagination PaginationParams) (*PaginatedResponse[QuestionAnalysisData], error)
+
+	// Session comparison and history
+	GetClassroomSessions(classroomID uuid.UUID, pagination PaginationParams) (*PaginatedResponse[SessionComparisonData], error)
+	GetQuizSessions(quizID uuid.UUID, pagination PaginationParams) (*PaginatedResponse[SessionComparisonData], error)
+
+	// Student rankings and leaderboards
+	GetClassroomStudentRankings(classroomID uuid.UUID, pagination PaginationParams) (*PaginatedResponse[StudentRankingData], error)
+	GetSessionStudentRankings(sessionID uuid.UUID, pagination PaginationParams) (*PaginatedResponse[StudentRankingData], error)
+
+	// NEW: Basic Overview Methods
+	// Classroom overview dashboard - basic stats
+	GetClassroomOverview(classroomID uuid.UUID) (*ClassroomOverviewData, error)
+	// Class performance summary - overall averages and participation
+	GetClassPerformanceSummary(classroomID uuid.UUID) (*ClassPerformanceSummaryData, error)
+	// Student activity summary - participation and quiz history
+	GetStudentActivitySummary(studentID, classroomID uuid.UUID) (*StudentActivitySummaryData, error)
 }
 
 // QuizRepository handles quiz-related operations

@@ -633,3 +633,569 @@ func (r *eventRepository) GetClassroomEngagementHistory(classroomID uuid.UUID, d
 	response := NewPaginatedResponse(results, pagination, int(totalCount))
 	return &response, nil
 }
+
+// NEW: Missing basic metrics implementations
+
+// GetQuizSummary - aggregates quiz performance across all sessions and classrooms
+func (r *eventRepository) GetQuizSummary(quizID uuid.UUID) (*QuizSummaryData, error) {
+	var summary QuizSummaryData
+
+	err := r.db.Raw(`
+		WITH quiz_stats AS (
+			SELECT 
+				q.quiz_id,
+				q.title,
+				COUNT(DISTINCT qs.session_id) as total_sessions,
+				COUNT(DISTINCT qs.classroom_id) as total_classrooms,
+				COUNT(DISTINCT ase.student_id) as total_students,
+				COUNT(DISTINCT qpe.question_id) as total_questions,
+				MIN(qs.started_at) as first_used,
+				MAX(qs.started_at) as last_used,
+				ROUND(AVG(CASE WHEN ase.is_correct THEN 1.0 ELSE 0.0 END) * 100, 2) as average_accuracy
+			FROM quizzes q
+			LEFT JOIN quiz_sessions qs ON q.quiz_id = qs.quiz_id
+			LEFT JOIN question_published_events qpe ON qs.session_id = qpe.session_id
+			LEFT JOIN answer_submitted_events ase ON qs.session_id = ase.session_id
+			WHERE q.quiz_id = ?
+			GROUP BY q.quiz_id, q.title
+		),
+		completion_stats AS (
+			SELECT 
+				AVG(session_completion.completion_rate) as average_completion
+			FROM (
+				SELECT 
+					qs.session_id,
+					COUNT(DISTINCT ase.student_id) * 100.0 / 
+					GREATEST(COUNT(DISTINCT cs.student_id), 1) as completion_rate
+				FROM quiz_sessions qs
+				JOIN classroom_students cs ON cs.classroom_id = qs.classroom_id
+				LEFT JOIN answer_submitted_events ase ON ase.session_id = qs.session_id
+				WHERE qs.quiz_id = ?
+				GROUP BY qs.session_id
+			) session_completion
+		),
+		engagement_stats AS (
+			SELECT 
+				COUNT(DISTINCT ase.student_id) * 100.0 / 
+				GREATEST(COUNT(DISTINCT cs.student_id), 1) as overall_engagement
+			FROM quiz_sessions qs
+			JOIN classroom_students cs ON cs.classroom_id = qs.classroom_id
+			LEFT JOIN answer_submitted_events ase ON ase.session_id = qs.session_id
+			WHERE qs.quiz_id = ?
+		)
+		SELECT 
+			qs.*,
+			COALESCE(cs.average_completion, 0) as average_completion,
+			COALESCE(es.overall_engagement, 0) as overall_engagement,
+			ROUND((COALESCE(qs.average_accuracy, 0) + COALESCE(es.overall_engagement, 0)) / 2, 2) as effectiveness_score
+		FROM quiz_stats qs
+		CROSS JOIN completion_stats cs
+		CROSS JOIN engagement_stats es
+	`, quizID, quizID, quizID).Scan(&summary).Error
+
+	return &summary, err
+}
+
+// GetQuestionAnalysis - performance of individual questions across all sessions
+func (r *eventRepository) GetQuestionAnalysis(questionID uuid.UUID) (*QuestionAnalysisData, error) {
+	var analysis QuestionAnalysisData
+
+	// Get basic question stats
+	err := r.db.Raw(`
+		SELECT 
+			q.question_id,
+			q.quiz_id,
+			COUNT(ase.event_id) as total_attempts,
+			SUM(CASE WHEN ase.is_correct THEN 1 ELSE 0 END) as correct_attempts,
+			ROUND(AVG(CASE WHEN ase.is_correct THEN 1.0 ELSE 0.0 END) * 100, 2) as accuracy_rate,
+			ROUND(AVG(EXTRACT(EPOCH FROM (ase.submitted_at - qpe.published_at))), 2) as average_response_time,
+			COUNT(DISTINCT qpe.session_id) as usage_count
+		FROM questions q
+		LEFT JOIN question_published_events qpe ON q.question_id = qpe.question_id
+		LEFT JOIN answer_submitted_events ase ON q.question_id = ase.question_id
+		WHERE q.question_id = ?
+		GROUP BY q.question_id, q.quiz_id
+	`, questionID).Scan(&analysis).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Set difficulty rating based on accuracy
+	if analysis.AccuracyRate >= 80 {
+		analysis.DifficultyRating = "Easy"
+	} else if analysis.AccuracyRate >= 60 {
+		analysis.DifficultyRating = "Medium"
+	} else if analysis.AccuracyRate >= 40 {
+		analysis.DifficultyRating = "Hard"
+	} else {
+		analysis.DifficultyRating = "Very Hard"
+	}
+
+	// Get answer distribution
+	var distributions []AnswerDistribution
+	err = r.db.Raw(`
+		SELECT 
+			answer,
+			COUNT(*) as count,
+			ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) as percentage
+		FROM answer_submitted_events
+		WHERE question_id = ?
+		GROUP BY answer
+		ORDER BY count DESC
+	`, questionID).Scan(&distributions).Error
+
+	if err != nil {
+		return &analysis, err
+	}
+
+	// Convert to map for easier access
+	analysis.AnswerDistribution = make(map[string]int)
+	for _, dist := range distributions {
+		analysis.AnswerDistribution[dist.Answer] = dist.Count
+	}
+
+	return &analysis, nil
+}
+
+// GetQuizQuestionsList - paginated list of all questions in a quiz with their analytics
+func (r *eventRepository) GetQuizQuestionsList(quizID uuid.UUID, pagination PaginationParams) (*PaginatedResponse[QuestionAnalysisData], error) {
+	var results []QuestionAnalysisData
+	var totalCount int64
+
+	// Get total count
+	err := r.db.Raw(`
+		SELECT COUNT(*)
+		FROM questions
+		WHERE quiz_id = ?
+	`, quizID).Scan(&totalCount).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Get paginated results
+	err = r.db.Raw(`
+		SELECT 
+			q.question_id,
+			q.quiz_id,
+			COALESCE(COUNT(ase.event_id), 0) as total_attempts,
+			COALESCE(SUM(CASE WHEN ase.is_correct THEN 1 ELSE 0 END), 0) as correct_attempts,
+			COALESCE(ROUND(AVG(CASE WHEN ase.is_correct THEN 1.0 ELSE 0.0 END) * 100, 2), 0) as accuracy_rate,
+			COALESCE(ROUND(AVG(EXTRACT(EPOCH FROM (ase.submitted_at - qpe.published_at))), 2), 0) as average_response_time,
+			COALESCE(COUNT(DISTINCT qpe.session_id), 0) as usage_count
+		FROM questions q
+		LEFT JOIN question_published_events qpe ON q.question_id = qpe.question_id
+		LEFT JOIN answer_submitted_events ase ON q.question_id = ase.question_id
+		WHERE q.quiz_id = ?
+		GROUP BY q.question_id, q.quiz_id
+		ORDER BY q.question_id
+		LIMIT ? OFFSET ?
+	`, quizID, pagination.PageSize, pagination.Offset).Scan(&results).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Set difficulty ratings
+	for i := range results {
+		if results[i].AccuracyRate >= 80 {
+			results[i].DifficultyRating = "Easy"
+		} else if results[i].AccuracyRate >= 60 {
+			results[i].DifficultyRating = "Medium"
+		} else if results[i].AccuracyRate >= 40 {
+			results[i].DifficultyRating = "Hard"
+		} else {
+			results[i].DifficultyRating = "Very Hard"
+		}
+	}
+
+	response := NewPaginatedResponse(results, pagination, int(totalCount))
+	return &response, nil
+}
+
+// GetClassroomSessions - paginated list of all sessions in a classroom
+func (r *eventRepository) GetClassroomSessions(classroomID uuid.UUID, pagination PaginationParams) (*PaginatedResponse[SessionComparisonData], error) {
+	var results []SessionComparisonData
+	var totalCount int64
+
+	// Get total count
+	err := r.db.Raw(`
+		SELECT COUNT(*)
+		FROM quiz_sessions
+		WHERE classroom_id = ?
+	`, classroomID).Scan(&totalCount).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Get paginated results
+	err = r.db.Raw(`
+		SELECT 
+			qs.session_id,
+			q.title as quiz_title,
+			c.name as classroom_name,
+			qs.started_at,
+			CASE 
+				WHEN qs.ended_at IS NOT NULL 
+				THEN EXTRACT(EPOCH FROM (qs.ended_at - qs.started_at)) || ' seconds'
+				ELSE NULL 
+			END as duration,
+			COUNT(DISTINCT cs.student_id) as total_students,
+			COUNT(DISTINCT ase.student_id) as participating_students,
+			COUNT(DISTINCT qpe.question_id) as total_questions,
+			ROUND(AVG(CASE WHEN ase.is_correct THEN 1.0 ELSE 0.0 END) * 100, 2) as average_accuracy,
+			ROUND(
+				COUNT(DISTINCT ase.student_id) * 100.0 / 
+				GREATEST(COUNT(DISTINCT cs.student_id), 1), 2
+			) as completion_rate,
+			ROUND(
+				(COALESCE(AVG(CASE WHEN ase.is_correct THEN 1.0 ELSE 0.0 END) * 100, 0) + 
+				 COUNT(DISTINCT ase.student_id) * 100.0 / GREATEST(COUNT(DISTINCT cs.student_id), 1)) / 2, 2
+			) as engagement_score
+		FROM quiz_sessions qs
+		JOIN quizzes q ON qs.quiz_id = q.quiz_id
+		JOIN classrooms c ON qs.classroom_id = c.classroom_id
+		JOIN classroom_students cs ON cs.classroom_id = qs.classroom_id
+		LEFT JOIN question_published_events qpe ON qpe.session_id = qs.session_id
+		LEFT JOIN answer_submitted_events ase ON ase.session_id = qs.session_id
+		WHERE qs.classroom_id = ?
+		GROUP BY qs.session_id, q.title, c.name, qs.started_at, qs.ended_at
+		ORDER BY qs.started_at DESC
+		LIMIT ? OFFSET ?
+	`, classroomID, pagination.PageSize, pagination.Offset).Scan(&results).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	response := NewPaginatedResponse(results, pagination, int(totalCount))
+	return &response, nil
+}
+
+// GetQuizSessions - paginated list of all sessions for a specific quiz
+func (r *eventRepository) GetQuizSessions(quizID uuid.UUID, pagination PaginationParams) (*PaginatedResponse[SessionComparisonData], error) {
+	var results []SessionComparisonData
+	var totalCount int64
+
+	// Get total count
+	err := r.db.Raw(`
+		SELECT COUNT(*)
+		FROM quiz_sessions
+		WHERE quiz_id = ?
+	`, quizID).Scan(&totalCount).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Get paginated results
+	err = r.db.Raw(`
+		SELECT 
+			qs.session_id,
+			q.title as quiz_title,
+			c.name as classroom_name,
+			qs.started_at,
+			CASE 
+				WHEN qs.ended_at IS NOT NULL 
+				THEN EXTRACT(EPOCH FROM (qs.ended_at - qs.started_at)) || ' seconds'
+				ELSE NULL 
+			END as duration,
+			COUNT(DISTINCT cs.student_id) as total_students,
+			COUNT(DISTINCT ase.student_id) as participating_students,
+			COUNT(DISTINCT qpe.question_id) as total_questions,
+			ROUND(AVG(CASE WHEN ase.is_correct THEN 1.0 ELSE 0.0 END) * 100, 2) as average_accuracy,
+			ROUND(
+				COUNT(DISTINCT ase.student_id) * 100.0 / 
+				GREATEST(COUNT(DISTINCT cs.student_id), 1), 2
+			) as completion_rate,
+			ROUND(
+				(COALESCE(AVG(CASE WHEN ase.is_correct THEN 1.0 ELSE 0.0 END) * 100, 0) + 
+				 COUNT(DISTINCT ase.student_id) * 100.0 / GREATEST(COUNT(DISTINCT cs.student_id), 1)) / 2, 2
+			) as engagement_score
+		FROM quiz_sessions qs
+		JOIN quizzes q ON qs.quiz_id = q.quiz_id
+		JOIN classrooms c ON qs.classroom_id = c.classroom_id
+		JOIN classroom_students cs ON cs.classroom_id = qs.classroom_id
+		LEFT JOIN question_published_events qpe ON qpe.session_id = qs.session_id
+		LEFT JOIN answer_submitted_events ase ON ase.session_id = qs.session_id
+		WHERE qs.quiz_id = ?
+		GROUP BY qs.session_id, q.title, c.name, qs.started_at, qs.ended_at
+		ORDER BY qs.started_at DESC
+		LIMIT ? OFFSET ?
+	`, quizID, pagination.PageSize, pagination.Offset).Scan(&results).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	response := NewPaginatedResponse(results, pagination, int(totalCount))
+	return &response, nil
+}
+
+// GetClassroomStudentRankings - ranked student performance within a classroom
+func (r *eventRepository) GetClassroomStudentRankings(classroomID uuid.UUID, pagination PaginationParams) (*PaginatedResponse[StudentRankingData], error) {
+	var results []StudentRankingData
+	var totalCount int64
+
+	// Get total count
+	err := r.db.Raw(`
+		SELECT COUNT(DISTINCT s.student_id)
+		FROM students s
+		JOIN classroom_students cs ON s.student_id = cs.student_id
+		WHERE cs.classroom_id = ?
+	`, classroomID).Scan(&totalCount).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Get paginated ranked results
+	err = r.db.Raw(`
+		WITH student_stats AS (
+			SELECT 
+				s.student_id,
+				COALESCE(s.name, 'Unknown') as student_name,
+				COUNT(ase.event_id) as questions_attempted,
+				SUM(CASE WHEN ase.is_correct THEN 1 ELSE 0 END) as correct_answers,
+				ROUND(AVG(CASE WHEN ase.is_correct THEN 1.0 ELSE 0.0 END) * 100, 2) as accuracy_rate,
+				ROUND(AVG(EXTRACT(EPOCH FROM (ase.submitted_at - qpe.published_at))), 2) as average_response_time,
+				COUNT(DISTINCT ase.session_id) as sessions_participated
+			FROM students s
+			JOIN classroom_students cs ON s.student_id = cs.student_id
+			LEFT JOIN answer_submitted_events ase ON s.student_id = ase.student_id
+			LEFT JOIN quiz_sessions qs ON ase.session_id = qs.session_id AND qs.classroom_id = cs.classroom_id
+			LEFT JOIN question_published_events qpe ON ase.question_id = qpe.question_id AND ase.session_id = qpe.session_id
+			WHERE cs.classroom_id = ?
+			GROUP BY s.student_id, s.name
+		),
+		ranked_students AS (
+			SELECT 
+				*,
+				ROW_NUMBER() OVER (ORDER BY accuracy_rate DESC, questions_attempted DESC) as rank,
+				ROUND(
+					(ROW_NUMBER() OVER (ORDER BY accuracy_rate DESC, questions_attempted DESC) - 1) * 100.0 / 
+					GREATEST(COUNT(*) OVER() - 1, 1), 2
+				) as percentile
+			FROM student_stats
+		)
+		SELECT *
+		FROM ranked_students
+		ORDER BY rank
+		LIMIT ? OFFSET ?
+	`, classroomID, pagination.PageSize, pagination.Offset).Scan(&results).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	response := NewPaginatedResponse(results, pagination, int(totalCount))
+	return &response, nil
+}
+
+// GetSessionStudentRankings - ranked student performance within a specific session
+func (r *eventRepository) GetSessionStudentRankings(sessionID uuid.UUID, pagination PaginationParams) (*PaginatedResponse[StudentRankingData], error) {
+	var results []StudentRankingData
+	var totalCount int64
+
+	// Get total count
+	err := r.db.Raw(`
+		SELECT COUNT(DISTINCT ase.student_id)
+		FROM answer_submitted_events ase
+		WHERE ase.session_id = ?
+	`, sessionID).Scan(&totalCount).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Get paginated ranked results
+	err = r.db.Raw(`
+		WITH student_stats AS (
+			SELECT 
+				s.student_id,
+				COALESCE(s.name, 'Unknown') as student_name,
+				COUNT(ase.event_id) as questions_attempted,
+				SUM(CASE WHEN ase.is_correct THEN 1 ELSE 0 END) as correct_answers,
+				ROUND(AVG(CASE WHEN ase.is_correct THEN 1.0 ELSE 0.0 END) * 100, 2) as accuracy_rate,
+				ROUND(AVG(EXTRACT(EPOCH FROM (ase.submitted_at - qpe.published_at))), 2) as average_response_time,
+				1 as sessions_participated
+			FROM answer_submitted_events ase
+			JOIN students s ON ase.student_id = s.student_id
+			LEFT JOIN question_published_events qpe ON ase.question_id = qpe.question_id AND ase.session_id = qpe.session_id
+			WHERE ase.session_id = ?
+			GROUP BY s.student_id, s.name
+		),
+		ranked_students AS (
+			SELECT 
+				*,
+				ROW_NUMBER() OVER (ORDER BY accuracy_rate DESC, questions_attempted DESC) as rank,
+				ROUND(
+					(ROW_NUMBER() OVER (ORDER BY accuracy_rate DESC, questions_attempted DESC) - 1) * 100.0 / 
+					GREATEST(COUNT(*) OVER() - 1, 1), 2
+				) as percentile
+			FROM student_stats
+		)
+		SELECT *
+		FROM ranked_students
+		ORDER BY rank
+		LIMIT ? OFFSET ?
+	`, sessionID, pagination.PageSize, pagination.Offset).Scan(&results).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	response := NewPaginatedResponse(results, pagination, int(totalCount))
+	return &response, nil
+}
+
+// NEW: Basic Overview Implementations
+
+// GetClassroomOverview - basic classroom statistics and recent activity
+func (r *eventRepository) GetClassroomOverview(classroomID uuid.UUID) (*ClassroomOverviewData, error) {
+	var overview ClassroomOverviewData
+
+	err := r.db.Raw(`
+		WITH classroom_info AS (
+			SELECT 
+				c.classroom_id,
+				c.name as classroom_name,
+				COUNT(cs.student_id) as total_students
+			FROM classrooms c
+			LEFT JOIN classroom_students cs ON c.classroom_id = cs.classroom_id
+			WHERE c.classroom_id = ?
+			GROUP BY c.classroom_id, c.name
+		),
+		activity_stats AS (
+			SELECT 
+				COUNT(DISTINCT qs.session_id) as total_sessions,
+				COUNT(DISTINCT CASE 
+					WHEN qs.started_at >= NOW() - INTERVAL '7 days' 
+					THEN qs.session_id 
+				END) as recent_sessions,
+				MAX(qs.started_at) as last_activity,
+				COUNT(DISTINCT CASE 
+					WHEN ase.submitted_at >= NOW() - INTERVAL '30 days' 
+					THEN ase.student_id 
+				END) as active_students
+			FROM quiz_sessions qs
+			LEFT JOIN answer_submitted_events ase ON qs.session_id = ase.session_id
+			WHERE qs.classroom_id = ?
+		)
+		SELECT 
+			ci.classroom_id,
+			ci.classroom_name,
+			ci.total_students,
+			COALESCE(as_stats.active_students, 0) as active_students,
+			COALESCE(as_stats.total_sessions, 0) as total_sessions,
+			COALESCE(as_stats.recent_sessions, 0) as recent_sessions,
+			as_stats.last_activity,
+			NOW() as created_at
+		FROM classroom_info ci
+		CROSS JOIN activity_stats as_stats
+	`, classroomID, classroomID).Scan(&overview).Error
+
+	return &overview, err
+}
+
+// GetClassPerformanceSummary - overall class performance metrics
+func (r *eventRepository) GetClassPerformanceSummary(classroomID uuid.UUID) (*ClassPerformanceSummaryData, error) {
+	var summary ClassPerformanceSummaryData
+
+	err := r.db.Raw(`
+		WITH classroom_info AS (
+			SELECT 
+				c.classroom_id,
+				c.name as classroom_name,
+				COUNT(cs.student_id) as total_students
+			FROM classrooms c
+			LEFT JOIN classroom_students cs ON c.classroom_id = cs.classroom_id
+			WHERE c.classroom_id = ?
+			GROUP BY c.classroom_id, c.name
+		),
+		performance_stats AS (
+			SELECT 
+				COUNT(DISTINCT ase.student_id) as participating_students,
+				COUNT(DISTINCT qs.session_id) as session_count,
+				COUNT(DISTINCT qs.quiz_id) as total_quizzes_taken,
+				COUNT(ase.event_id) as total_questions_answered,
+				ROUND(AVG(CASE WHEN ase.is_correct THEN 1.0 ELSE 0.0 END) * 100, 2) as overall_accuracy,
+				ROUND(AVG(EXTRACT(EPOCH FROM (ase.submitted_at - qpe.published_at))), 2) as average_response_time
+			FROM quiz_sessions qs
+			LEFT JOIN answer_submitted_events ase ON qs.session_id = ase.session_id
+			LEFT JOIN question_published_events qpe ON ase.question_id = qpe.question_id 
+				AND ase.session_id = qpe.session_id
+			WHERE qs.classroom_id = ?
+		)
+		SELECT 
+			ci.classroom_id,
+			ci.classroom_name,
+			ci.total_students,
+			COALESCE(ps_stats.participating_students, 0) as participating_students,
+			COALESCE(ps_stats.overall_accuracy, 0) as overall_accuracy,
+			ROUND(
+				COALESCE(ps_stats.participating_students, 0) * 100.0 / 
+				GREATEST(ci.total_students, 1), 2
+			) as overall_participation_rate,
+			COALESCE(ps_stats.total_quizzes_taken, 0) as total_quizzes_taken,
+			COALESCE(ps_stats.total_questions_answered, 0) as total_questions_answered,
+			COALESCE(ps_stats.average_response_time, 0) as average_response_time,
+			COALESCE(ps_stats.session_count, 0) as session_count
+		FROM classroom_info ci
+		CROSS JOIN performance_stats ps_stats
+	`, classroomID, classroomID).Scan(&summary).Error
+
+	return &summary, err
+}
+
+// GetStudentActivitySummary - individual student participation and performance summary
+func (r *eventRepository) GetStudentActivitySummary(studentID, classroomID uuid.UUID) (*StudentActivitySummaryData, error) {
+	var summary StudentActivitySummaryData
+
+	err := r.db.Raw(`
+		WITH student_info AS (
+			SELECT 
+				s.student_id,
+				COALESCE(s.name, 'Unknown') as student_name,
+				c.classroom_id,
+				c.name as classroom_name
+			FROM students s
+			JOIN classroom_students cs ON s.student_id = cs.student_id
+			JOIN classrooms c ON cs.classroom_id = c.classroom_id
+			WHERE s.student_id = ? AND c.classroom_id = ?
+		),
+		activity_stats AS (
+			SELECT 
+				COUNT(DISTINCT ase.session_id) as total_sessions_participated,
+				COUNT(DISTINCT qs.quiz_id) as unique_quizzes_taken,
+				COUNT(ase.event_id) as total_questions_answered,
+				ROUND(AVG(CASE WHEN ase.is_correct THEN 1.0 ELSE 0.0 END) * 100, 2) as overall_accuracy,
+				ROUND(AVG(EXTRACT(EPOCH FROM (ase.submitted_at - qpe.published_at))), 2) as average_response_time,
+				MIN(ase.submitted_at) as first_activity,
+				MAX(ase.submitted_at) as last_activity
+			FROM answer_submitted_events ase
+			JOIN quiz_sessions qs ON ase.session_id = qs.session_id
+			LEFT JOIN question_published_events qpe ON ase.question_id = qpe.question_id 
+				AND ase.session_id = qpe.session_id
+			WHERE ase.student_id = ? AND qs.classroom_id = ?
+		)
+		SELECT 
+			si.student_id,
+			si.student_name,
+			si.classroom_id,
+			si.classroom_name,
+			COALESCE(act_stats.total_sessions_participated, 0) as total_sessions_participated,
+			COALESCE(act_stats.unique_quizzes_taken, 0) as unique_quizzes_taken,
+			COALESCE(act_stats.total_questions_answered, 0) as total_questions_answered,
+			COALESCE(act_stats.overall_accuracy, 0) as overall_accuracy,
+			COALESCE(act_stats.average_response_time, 0) as average_response_time,
+			act_stats.first_activity,
+			act_stats.last_activity
+		FROM student_info si
+		CROSS JOIN activity_stats act_stats
+	`, studentID, classroomID, studentID, classroomID).Scan(&summary).Error
+
+	return &summary, err
+}

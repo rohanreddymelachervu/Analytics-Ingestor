@@ -25,7 +25,7 @@ func NewService(eventRepo repository.EventRepository, quizRepo repository.QuizRe
 	}
 }
 
-func (s *Service) ProcessEvent(event EventPayload, userID interface{}) error {
+func (s *Service) ProcessEvent(event models.EventPayload, userID interface{}) error {
 	switch event.EventType {
 	case "QUESTION_PUBLISHED":
 		return s.processQuestionPublishedEvent(event, userID)
@@ -38,7 +38,7 @@ func (s *Service) ProcessEvent(event EventPayload, userID interface{}) error {
 	}
 }
 
-func (s *Service) processQuestionPublishedEvent(event EventPayload, userID interface{}) error {
+func (s *Service) processQuestionPublishedEvent(event models.EventPayload, userID interface{}) error {
 	// Parse UUIDs
 	eventID, err := uuid.Parse(event.EventID)
 	if err != nil {
@@ -78,7 +78,7 @@ func (s *Service) processQuestionPublishedEvent(event EventPayload, userID inter
 	return s.EventRepo.SaveQuestionPublishedEvent(questionEvent)
 }
 
-func (s *Service) processAnswerSubmittedEvent(event EventPayload, userID interface{}) error {
+func (s *Service) processAnswerSubmittedEvent(event models.EventPayload, userID interface{}) error {
 	// Parse UUIDs
 	eventID, err := uuid.Parse(event.EventID)
 	if err != nil {
@@ -125,7 +125,7 @@ func (s *Service) processAnswerSubmittedEvent(event EventPayload, userID interfa
 	return s.EventRepo.SaveAnswerSubmittedEvent(answerEvent)
 }
 
-func (s *Service) processSessionStartedEvent(event EventPayload, userID interface{}) error {
+func (s *Service) processSessionStartedEvent(event models.EventPayload, userID interface{}) error {
 	// Parse UUIDs
 	sessionID, err := uuid.Parse(event.SessionID)
 	if err != nil {
